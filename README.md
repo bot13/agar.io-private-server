@@ -6,3 +6,5 @@ Incomplete, please help fixing stuff!
 (It's a QtCreator project in Qt5)
 
 License: GNU GPL 2.0
+
+Copyright RN+
