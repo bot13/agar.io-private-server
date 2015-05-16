@@ -1,3 +1,6 @@
+/* Copyright RN+ 2015 */
+/* See license.txt */
+
 #include "gameserver.h"
 #include "QtWebSockets/qwebsocketserver.h"
 #include "QtWebSockets/qwebsocket.h"
