@@ -1,6 +1,6 @@
 /*
  * Private server for agar.io
- * (c) Renze Nicolai
+ * (c) Renze Nicolai 2015
  * License: GPLv2
  *
  * Note: This program is not in any way
