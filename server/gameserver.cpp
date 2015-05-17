@@ -6,7 +6,7 @@
  * Note: This program is not in any way
  * related to the developers behind agar.io
  *
- * In case you have problems with using this software
+ * In case you encounter problems while using this software
  * please do NOT contact the agar.io developers but instead
  * contact me through Github.
  */
