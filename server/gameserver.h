@@ -6,6 +6,7 @@
 #include <QtCore/QByteArray>
 #include <stdint.h>
 #include <QTimer>
+#include <cmath>
 
 QT_FORWARD_DECLARE_CLASS(QWebSocketServer)
 QT_FORWARD_DECLARE_CLASS(QWebSocket)
@@ -26,7 +27,8 @@ private Q_SLOTS:
     void processBinaryMessage(QByteArray message);
     void socketDisconnected();
     void sendHighscore(QWebSocket *pClient);
-    void sendUpdate(QWebSocket *pClient);
+    void sendTeamHighscore(QWebSocket *pClient);
+    void sendUpdate(int clientid);
     void sendCamera(QWebSocket *pClient, double minx, double maxx, double miny, double maxy);
     void sendNewMyID(QWebSocket *pClient, uint32_t itemid);
     void sendClearMyID(QWebSocket *pClient);
@@ -36,12 +38,16 @@ private Q_SLOTS:
     void game();
     void updateHighscore();
     void deletePlayersItems(int clientid);
+    void createFood();
+    void createVirus();
 
 private:
     QWebSocketServer *m_pWebSocketServer;
     QList<QWebSocket *> m_clients;
     bool m_debug;
     uint8_t randomByte();
+    double weighttosize(double weight);
+    double sizetoweight(double size);
 };
 
 #endif // GAMESERVER_H

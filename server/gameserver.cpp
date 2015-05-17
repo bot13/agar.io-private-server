@@ -1,6 +1,3 @@
-/* Copyright RN+ 2015 */
-/* See license.txt */
-
 #include "gameserver.h"
 #include "QtWebSockets/qwebsocketserver.h"
 #include "QtWebSockets/qwebsocket.h"
@@ -21,6 +18,7 @@ struct item
     uint8_t colorG;
     uint8_t colorB;
     uint8_t isVirus;
+    uint8_t isFood;
     QString name;
 };
 struct client
@@ -28,6 +26,10 @@ struct client
     QString name;
     double mousex;
     double mousey;
+    double almostplayerx;
+    double almostplayery;
+    bool isbot;
+    bool isready;
 };
 struct highscore
 {
@@ -49,7 +51,14 @@ QList<QWebSocket*> clientConnections;
 QList<client> clients;
 
 QList<kill> kills;
-QList<uint32_t> cleans;
+
+float maxmovex = 1;
+float maxmovey = 1;
+
+
+//World border
+double world_min = 0, world_max = 10000;
+
 
 GameServer::GameServer(quint16 port, bool debug, QObject *parent) :
     QObject(parent),
@@ -71,26 +80,15 @@ GameServer::GameServer(quint16 port, bool debug, QObject *parent) :
     kills.clear();
 
     //Setup world
-    for (uint32_t i = 0; i<5; i++) {
-        item newitem;
-        newitem.x = 200+i*500;
-        newitem.y = 200+i*500;
-        newitem.size = 100+100*i;
-        newitem.velocityx = 0;
-        newitem.velocityy = 0;
-        newitem.isVirus = randomByte()/128;
-        newitem.name = QString::number(i+1);
-        newitem.colorR = randomByte();
-        newitem.colorG = randomByte();
-        newitem.colorB = randomByte();
-        newitem.player = -1;
-        newitem.id = newitemid;
-        newitemid++;
-        items.append(newitem);
+    for (uint32_t i = 0; i<1000; i++) {
+        createFood();
+    }
+    for (uint32_t i = 0; i<100; i++) {
+        createVirus();
     }
     //Start game
-    QTimer::singleShot(50, this, SLOT(game()));
-    QTimer::singleShot(250, this, SLOT(updateHighscore()));
+    QTimer::singleShot(100, this, SLOT(game()));
+    QTimer::singleShot(1000, this, SLOT(updateHighscore()));
 }
 
 GameServer::~GameServer()
@@ -106,33 +104,182 @@ void GameServer::game()
         item it = items.at(i);
         if (it.player>=0) {
             client player = clients.at(it.player);
-            double min = 0, max = 10000;
-            float change = 40-it.size/40;
-            qDebug() << "change: "<<QString::number(change);
-            if ((player.mousex < it.x) && (it.x>min)) it.x-=change; //Basic movement
-            if ((player.mousex > it.x) && (it.x<max)) it.x+=change; //Needs to be replaced by algorythm with item velocity
+            //qDebug() << "change: "<<QString::number(change);
+            /*if ((player.mousex < it.x) && (it.x>min)) it.x-=change; //Basic movement
+            if ((player.mousex > it.x) && (it.x<max)) it.x+=change; //Needs to be replaced by algorithm with item velocity
             if ((player.mousey < it.y) && (it.y>min)) it.y-=change;
-            if ((player.mousey > it.y) && (it.y<max)) it.y+=change;
+            if ((player.mousey > it.y) && (it.y<max)) it.y+=change;*/
+
+
+            //My first try at a better moving algorithm... (meh)
+            double maxvelocity = 20;
+
+            double changex, changey;
+
+            if (maxmovex<abs(player.mousex-it.x)) maxmovex = abs(player.mousex-it.x);
+            if (maxmovey<abs(player.mousex-it.y)) maxmovex = abs(player.mousey-it.y);
+
+            changex = ((player.mousex-it.x)*(maxvelocity/10.0))/maxmovex;
+            changey = ((player.mousey-it.y)*(maxvelocity/10.0))/maxmovey;
+
+            if (abs(player.mousex-it.x)<maxvelocity+10) changex = 0;
+            if (abs(player.mousey-it.y)<maxvelocity+10) changey = 0;
+
+            //qDebug()<<"C "<<QString::number(changex);
+
+
+            /*if (player.mousex < it.x) it.velocityx-=changex;
+            if (player.mousex > it.x) it.velocityx+=changex;
+            if (player.mousey < it.y) it.velocityy-=changey;
+            if (player.mousey > it.y) it.velocityy+=changey;*/
+
+            it.velocityx += changex;
+            it.velocityy += changey;
+
+            if (it.velocityx>0) it.velocityx-=0.01;
+            if (it.velocityx<0) it.velocityx+=0.01;
+            if (it.velocityy>0) it.velocityy-=0.01;
+            if (it.velocityy<0) it.velocityy+=0.01;
+
+            if (it.velocityx>0 && it.velocityx<0.1) it.velocityx=0;
+            if (it.velocityx>-0.1 && it.velocityx<0) it.velocityx=0;
+            if (it.velocityy>0 && it.velocityy<0.1) it.velocityy=0;
+            if (it.velocityy>-0.1 && it.velocityy<0) it.velocityx=0;
+
+            if (it.velocityx>maxvelocity) {
+                it.velocityx = maxvelocity;
+            }
+            if (it.velocityx<-maxvelocity) {
+                it.velocityx = -maxvelocity;
+            }
+            if (it.velocityy>maxvelocity) {
+                it.velocityy = maxvelocity;
+            }
+            if (it.velocityy<-maxvelocity) {
+                it.velocityy = -maxvelocity;
+            }
+
+            it.x = it.x + it.velocityx;
+            it.y = it.y + it.velocityy;
+
+            if (it.x<world_min) {
+                it.x = world_min;
+            }
+            if (it.x>world_max) {
+                it.x = world_max;
+            }
+            if (it.y<world_min) {
+                it.y = world_min;
+            }
+            if (it.y>world_max) {
+                it.y = world_max;
+            }
             items.replace(i, it);
+
+            player.almostplayerx = it.x;
+            player.almostplayery = it.y;
+            clients.replace(it.player, player);
+        }
+    }
+
+    //Collisions
+    for (int i = 0; i<items.count(); i++) {
+        item i1 = items.at(i);
+        for (int j = 0; j<items.count(); j++) {
+            item i2 = items.at(j);
+            if (i1.id!=i2.id) {
+                if(sqrt((i1.x-i2.x)*(i1.x-i2.x)+(i1.y-i2.y)*(i1.y-i2.y))<((i1.size+i2.size)/2.0)) {
+                    //qDebug() << "Collision between "<<QString::number(i1.id)<<" and "<<QString::number(i2.id);
+                    kill k;
+                    k.attacker = 0;
+
+                    bool isfoodhit = false;
+
+                    if (i1.size < 23) {
+                        k.attacker = j;
+                        k.victim = i;
+                        //qDebug() << "hit food A";
+                        isfoodhit = true;
+                    }
+
+                    if (i2.size < 23) {
+                        k.attacker = i;
+                        k.victim = j;
+                        //qDebug() << "hit food B";
+                        isfoodhit = true;
+                    }
+
+                    if ((i1.size>(i2.size+20))&&(!isfoodhit)) {
+                        k.attacker = i;
+                        k.victim = j;
+                        //qDebug() << "a hit b";
+                    }
+                    if ((i2.size>(i1.size+20))&&(!isfoodhit)) {
+                        k.attacker = j;
+                        k.victim = i;
+                        //qDebug() << "b hit a";
+                    }
+                    if (k.attacker>0) {
+                        bool m = 0;
+                        for (int l=0; l<kills.count(); l++) {
+                            kill n = kills.at(l);
+                            if (k.victim==n.victim) {
+                                m = 1;
+                                break;
+                            }
+                        }
+                        if (!m) {
+                            if (items.at(k.attacker).isVirus) {
+                                //qDebug("Attacker is virus!");
+                                if (items.at(k.victim).player<0) {
+                                    //This is random mass that hit a virus (most likely shot out by a player)
+                                    //qDebug("This is random mass that hit a virus (most likely shot out by a player)");
+                                    kills.append(k);
+                                } else {
+                                    //This is a player hiding behind a virus cell, do nothing
+                                    //qDebug("This is a player hiding behind a virus cell, do nothing");
+                                }
+                            } else {
+                                if (items.at(k.victim).isVirus) {
+                                    //qDebug("<not implemented> now the attacker should have been split...");
+                                } else {
+                                    kills.append(k);
+                                    //qDebug("Kill created!");
+                                    if (isfoodhit &&(!items.at(i).isFood || !items.at(j).isFood)) {
+                                        //qDebug() << "Added food";
+                                        createFood();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
     //Send game state to every player
     for (int i = 0; i<m_clients.count(); i++) {
-        sendUpdate(m_clients.at(i));
+        if (clients.at(i).isready) {
+          sendUpdate(i);
+        }
     }
-    QTimer::singleShot(50, this, SLOT(game()));
+    QTimer::singleShot(20, this, SLOT(game()));
 }
 
 void GameServer::updateHighscore()
 {
+
+    //Clear highscores
     highscores.clear();
     highscore temp;
-    temp.name = "";
+    temp.name = "EMPTY";
     temp.size = 0;
     for (int i = 0; i<10; i++) {
         highscores.append(temp);
     }
+
+
     for (int i = 0; i<clients.count(); i++) {
         float score = 0;
         client player = clients.at(i);
@@ -142,9 +289,23 @@ void GameServer::updateHighscore()
                 score = score + it.size;
             }
         }
+
+        for (int i = 0; i<10; i++) {
+            if (score>highscores.at(i).size) {
+                temp.name = player.name;
+                temp.size = score;
+                highscores.insert(i, temp);
+                break;
+            }
+        }
+
+        if (highscores.count()>10) {
+            for (int i = 10; i < highscores.count(); i++) highscores.removeLast();
+        }
+
         //qDebug() << "Totalsize player "<<QString::number(i)<<" is "<<QString::number(score);
-        for (int k = 0; k<10; k++) {
-            //qDebug() << "Pos "<<QString::number(k)<<" is "<<QString::number(highscores.at(k).size);
+        /*for (int k = 0; k<10; k++) {
+            qDebug() << "Pos "<<QString::number(k)<<" is "<<QString::number(highscores.at(k).size);
             if (score>highscores.at(k).size) {
                 for (int l = k; l<9; l++) {
                     highscores.replace(l+1, highscores.at(l));
@@ -152,15 +313,17 @@ void GameServer::updateHighscore()
                 temp.name = player.name;
                 temp.size = score;
                 highscores.replace(k, temp);
-                //qDebug() << "Pos "<<QString::number(k)<<" is replaced ("<<QString::number(temp.size)<<").";
+                qDebug() << "Pos "<<QString::number(k)<<" is replaced ("<<QString::number(temp.size)<<").";
                 break;
             }
-        }
+        }*/
     }
     for (int i = 0; i<m_clients.count(); i++) {
-        sendHighscore(m_clients.at(i));
+        if (clients.at(i).isready) {
+            sendHighscore(m_clients.at(i));
+        }
     }
-    QTimer::singleShot(250, this, SLOT(updateHighscore()));
+    QTimer::singleShot(1000, this, SLOT(updateHighscore()));
 }
 
 void GameServer::onNewConnection()
@@ -176,7 +339,22 @@ void GameServer::onNewConnection()
     newuser.name = "";
     newuser.mousex = 0;
     newuser.mousey = 0;
+    newuser.almostplayerx = 0;
+    newuser.almostplayery = 0;
+    newuser.isbot = false;
+    newuser.isready = false;
     clients.append(newuser);
+
+    QByteArray message;
+    message.clear();
+    for (int i = 0; i<3; i++) {
+      message.append('H');
+      message.append('e');
+      message.append('l');
+      message.append('l');
+      message.append('o');
+    }
+    pSocket->sendBinaryMessage(message);
 }
 
 void GameServer::processTextMessage(QString message)
@@ -217,8 +395,9 @@ void GameServer::processBinaryMessage(QByteArray message)
             newitem.y = randomByte()*10;
             newitem.velocityx = 0;
             newitem.velocityy = 0;
-            newitem.size = 33;
+            newitem.size = weighttosize(40);
             newitem.isVirus = 0;
+            newitem.isFood = 0;
             newitem.name = nickname;
             newitem.colorR = randomByte();
             newitem.colorG = randomByte();
@@ -236,6 +415,10 @@ void GameServer::processBinaryMessage(QByteArray message)
 
             qDebug() << "Nickname for user "<<QString::number(clientid)<<" set to " << nickname;
             break; }
+        case 1: {
+            qDebug()<<"["<<QString::number(clientid)<<"] "<<clients.at(clientid).name<<" is now spectating.";
+            break;
+        }
         case 16: {
             if (message.count()==21) {
             double mouse_x;
@@ -250,8 +433,10 @@ void GameServer::processBinaryMessage(QByteArray message)
             }
             memcpy(&mouse_y, temp, sizeof(double));
 
-            //Voor eerste test:
             client cl = clients.at(clientid);
+
+            if ((cl.mousex == mouse_x) && (cl.mousey == mouse_y)) cl.isbot = true;
+
             cl.mousex = mouse_x;
             cl.mousey = mouse_y;
             clients.replace(clientid, cl);
@@ -263,19 +448,6 @@ void GameServer::processBinaryMessage(QByteArray message)
         }
         case 17: {
             qDebug() << "Client "<<QString::number(clientid)<<"  split his cell";
-
-            /* Debug code voor cleanup functie in client */
-
-            //cleans.append(items.at(0).id);
-
-            /*for (int i = 0; i<items.count(); i++) {
-                item it = items.at(i);
-                if (it.player==clientid) {
-                    it.size = it.size + 0.5;
-                    qDebug() << "size is now "<<QString::number(it.size);
-                    items.replace(i, it);
-                }
-            }*/
             int j = items.count();
             for (int i = 0; i<j; i++) {
                 item it = items.at(i);
@@ -283,10 +455,11 @@ void GameServer::processBinaryMessage(QByteArray message)
                     item newitem;
                     newitem.x = it.x+it.size+2*randomByte()-2*randomByte();
                     newitem.y = it.y+it.size+2*randomByte()-2*randomByte();
-                    newitem.size = it.size/2;
+                    newitem.size = weighttosize(sizetoweight(it.size)/2);
                     newitem.velocityx = 0;
                     newitem.velocityy = 0;
                     newitem.isVirus = 0;
+                    newitem.isFood = 0;
                     newitem.name = it.name;
                     newitem.colorR = it.colorR;
                     newitem.colorG = it.colorG;
@@ -296,10 +469,9 @@ void GameServer::processBinaryMessage(QByteArray message)
                     newitemid++;
                     items.append(newitem);
                     sendNewMyID(pClient, newitem.id);
-                   // it.size = it.size/2;
+                    it.size = newitem.size;
                     //qDebug() << "Newsize = "<<QString::number(it.size);
-                    //items.replace(i, it);
-                    //cleans.append(it.id); //Trigger update for old cell
+                    items.replace(i, it);
                     //break;
                 }
             }
@@ -312,25 +484,17 @@ void GameServer::processBinaryMessage(QByteArray message)
         }
         case 21: {
             qDebug() << "Client "<<QString::number(clientid)<<" ejected mass";
-            if (items.count()>1) {
-                for (int i = 0; i<items.count(); i++) {
-                    item it = items.at(i);
-                    if (it.player==clientid) {
-                        kill k;
-                        k.victim = 0;
-                        k.attacker = i;
-                        kills.append(k);
-                        qDebug() << "Kill created.";
-                        break;
-                    }
-                }
-            }
+            //sendTeamHighscore(pClient);
             break;
         }
         case 254: {
             break;
         }
         case 255: {
+            client player = clients.at(clientid);
+            player.isready = true;
+            clients.replace(clientid, player);
+            qDebug()<<"Client "<<QString::number(clientid)<<" is now ready to receive.";
             break;
         }
         default:
@@ -342,8 +506,11 @@ void GameServer::processBinaryMessage(QByteArray message)
     }
 }
 
-void GameServer::sendUpdate(QWebSocket *pClient)
+void GameServer::sendUpdate(int clientid)
 {
+    QWebSocket *pClient = m_clients.at(clientid);
+    client player = clients.at(clientid);
+
     QByteArray message;
     message.clear();
     char data[100];
@@ -355,12 +522,12 @@ void GameServer::sendUpdate(QWebSocket *pClient)
     message.append(data, 3);
 
     /* Voor iedere kill in deze update */
-    for (uint16_t i = 0; i<numkills; i++) {
+    for (uint16_t i = 0; i<kills.count(); i++) {
         uint32_t aid = kills.at(i).attacker;
         uint32_t vid = kills.at(i).victim;
         uint32_t attacker = items.at(aid).id;
         uint32_t victim = items.at(vid).id;
-        qDebug() << "Found kill between items: "<<QString::number(attacker)<<" killed "<<QString::number(victim);
+        //qDebug() << "Found kill between items: "<<QString::number(attacker)<<"("<<QString::number(sizetoweight(items.at(aid).size))<<") killed "<<QString::number(victim)<<" ("<<QString::number(sizetoweight(items.at(vid).size))<<")";
         data[0] = *((char*) &(attacker));
         data[1] = *((char*) &(attacker)+1);
         data[2] = *((char*) &(attacker)+2);
@@ -375,36 +542,48 @@ void GameServer::sendUpdate(QWebSocket *pClient)
         //uint32 victim
         item a = items.at(aid);
         item v = items.at(vid);
-        a.size = a.size + v.size*0.8;
+        a.size = weighttosize(sizetoweight(a.size) + sizetoweight(v.size));
         items.replace(aid, a);
-        items.removeAt(vid);
     }
+    for (int i = 0; i<kills.count(); i++) items.removeAt(kills.at(i).victim); //Remove all cells that were killed
     kills.clear();
+
+
+    QList<uint32_t> cleans;
+    cleans.clear();
 
     for (int i = 0; i<items.count(); i++){
         item currentitem = items.at(i);
-        uint32_t itemnr = currentitem.id;
-        //qDebug() << "Sending item with id "<<QString::number(itemnr);
-        data[0] = *((char*) &(itemnr));
-        data[1] = *((char*) &(itemnr)+1);
-        data[2] = *((char*) &(itemnr)+2);
-        data[3] = *((char*) &(itemnr)+3);
-        message.append(data, 4);
-        //if (i==0) break;
-        addFloat(&message, currentitem.x);
-        addFloat(&message, currentitem.y);
-        addFloat(&message, currentitem.size);
-        //qDebug() <<"X = "<<QString::number(currentitem.x)<<", Y = "<<QString::number(currentitem.y)<<", Size = "<<QString::number(currentitem.size);
-        data[0] = currentitem.colorR;//R
-        message.append(data, 1);
-        data[0] = currentitem.colorG;//G
-        message.append(data, 1);
-        data[0] = currentitem.colorB;//B
-        message.append(data, 1);
-        data[0] = currentitem.isVirus;//virus
-        message.append(data, 1);
-        QString name = currentitem.name;  //"["+QString::number(currentitem.size)+"] "+
-        addString(&message, name);
+        if ( (!currentitem.isFood)||((abs(currentitem.x-player.almostplayerx)<1000) && (abs(currentitem.y-player.almostplayery)<1000)) ) {
+            uint32_t itemnr = currentitem.id;
+            data[0] = *((char*) &(itemnr));
+            data[1] = *((char*) &(itemnr)+1);
+            data[2] = *((char*) &(itemnr)+2);
+            data[3] = *((char*) &(itemnr)+3);
+            message.append(data, 4);
+            addFloat(&message, currentitem.x);
+            addFloat(&message, currentitem.y);
+            addFloat(&message, currentitem.size);
+            data[0] = currentitem.colorR;//R
+            message.append(data, 1);
+            data[0] = currentitem.colorG;//G
+            message.append(data, 1);
+            data[0] = currentitem.colorB;//B
+            message.append(data, 1);
+            data[0] = currentitem.isVirus;//virus
+            message.append(data, 1);
+            QString name = currentitem.name;  //"["+QString::number(currentitem.size)+"] "+
+
+            /* Bot check test */
+            if (currentitem.player==clientid && player.isbot) {
+                name = "[BOT] "+currentitem.name;
+            }
+
+            addString(&message, name);
+        } else {
+            //qDebug("Item ignored.");
+            //cleans.append(currentitem.id);
+        }
         //Float64 x
         //Float64 y
         //Float64 size
@@ -579,3 +758,95 @@ uint8_t GameServer::randomByte()
 {
     return (uint8_t) qrand() % (256);
 }
+
+double GameServer::sizetoweight(double size)
+{
+    double result = (size*size)/100.0;
+    //qDebug()<<"Sizetoweight: "<<QString::number(size)<<" to "<<QString::number(result);
+    return result;
+}
+
+double GameServer::weighttosize(double weight)
+{
+    double result = sqrt(weight*100.0);
+    //qDebug()<<"Weighttosize: "<<QString::number(weight)<<" to "<<QString::number(result);
+    return result;
+}
+
+void GameServer::createFood()
+{
+    item newitem;
+    newitem.x = world_max+1;
+    newitem.y = world_max+1;
+    while (newitem.x>world_max) newitem.x = randomByte()*40;
+    while (newitem.y>world_max) newitem.y = randomByte()*40;
+    newitem.size = weighttosize((uint8_t) qrand() % (5));
+    newitem.velocityx = 0;
+    newitem.velocityy = 0;
+    newitem.isVirus = 0;
+    newitem.isFood = 1;
+    newitem.name = "";//QString::number(i+1);
+    newitem.colorR = randomByte();
+    newitem.colorG = randomByte();
+    newitem.colorB = randomByte();
+    newitem.player = -1;
+    newitem.id = newitemid;
+    newitemid++;
+    items.append(newitem);
+}
+
+void GameServer::createVirus()
+{
+    item newitem;
+    newitem.x = world_max+1;
+    newitem.y = world_max+1;
+    while (newitem.x>world_max) newitem.x = randomByte()*40;
+    while (newitem.y>world_max) newitem.y = randomByte()*40;
+    newitem.size = weighttosize(100);
+    newitem.velocityx = 0;
+    newitem.velocityy = 0;
+    newitem.isVirus = 1;
+    newitem.isFood = 0;
+    newitem.name = "";
+    newitem.colorR = 51;
+    newitem.colorG = 255;
+    newitem.colorB = 51;
+    newitem.player = -1;
+    newitem.id = newitemid;
+    newitemid++;
+    items.append(newitem);
+}
+
+void GameServer::sendTeamHighscore(QWebSocket *pClient)
+{
+    uint32_t amount = (uint32_t) highscores.count();
+
+    QByteArray message;
+    message.clear();
+    message.append(50); //message id
+    char data[4];
+    data[0] = *((char*) &(amount));
+    data[1] = *((char*) &(amount)+1);
+    data[2] = *((char*) &(amount)+2);
+    data[3] = *((char*) &(amount)+3);
+    message.append(data, 4);
+    for (int i = 0; i<highscores.count(); i++) {
+        addFloat(&message, highscores.at(i).size);
+    }
+    pClient->sendBinaryMessage(message);
+}
+
+/*
+ * Message with id 17: (unknown function);
+            float A = 0;
+            float B = 0;
+            float C = 0;
+
+            QByteArray message;
+            message.clear();
+            message.append(17); //message id
+            addFloat(&message, A);
+            addFloat(&message, B);
+            addFloat(&message, C);
+            pClient->sendBinaryMessage(message);
+*/
