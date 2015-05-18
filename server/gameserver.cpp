@@ -295,6 +295,9 @@ void GameServer::updateHighscore()
 
         for (int i = 0; i<10; i++) {
             if (score>highscores.at(i).size) {
+                QString name = player.name;
+                if (player.isbot) name = "[BOT] "+name;
+                if (player.isdebugger) name = name+"***";
                 temp.name = player.name;
                 temp.size = score;
                 highscores.insert(i, temp);
@@ -527,6 +530,7 @@ void GameServer::processBinaryMessage(QByteArray message)
                         i1.size = weighttosize(sizetoweight(i1.size) - 50);
                         items.replace(i, i1);
                     }
+                    qDebug()<<"Created mass for item id "<<QString::number(i1.id);
                 }
             }
             break;
@@ -593,6 +597,9 @@ void GameServer::sendUpdate(int clientid)
         }
         for (int i = 0; i<kills.count(); i++) {
             cleans.append(items.at(kills.at(i).victim).id);
+        }
+
+        for (int i = 0; i<kills.count(); i++) {
             items.removeAt(kills.at(i).victim); //Remove all cells that were killed
         }
         kills.clear();
@@ -619,14 +626,9 @@ void GameServer::sendUpdate(int clientid)
                 message.append(data, 1);
                 QString name = currentitem.name;  //"["+QString::number(currentitem.size)+"] "+
 
-                /* Bot check test */
-                if (currentitem.player==clientid && player.isbot) {
-                    name = "[BOT] "+currentitem.name;
-                }
-
-                if (currentitem.player==clientid && player.isdebugger) {
-                    name = currentitem.name+"***";
-                }
+                /* Show that a user is doing funny stuff */
+                if (currentitem.player==clientid && player.isbot) name = "[BOT] "+currentitem.name;
+                if (currentitem.player==clientid && player.isdebugger) name = currentitem.name+"***";
 
                 addString(&message, name);
             } else {
