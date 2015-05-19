@@ -41,6 +41,10 @@ private Q_SLOTS:
     void createFood();
     void createVirus();
     void createMass(uint8_t cR, uint8_t cG, uint8_t cB, float x, float y, float targetx, float targety, float size);
+    void debugMakeVirus(int clientid);
+    void sendSpectateView(QWebSocket *pClient, float x, float y, float scale);
+    void splitCellsForPlayer(int clientid, bool all = 0);
+    void splitCell(QWebSocket *pClient, int itemid, bool all = 0);
 
 private:
     QWebSocketServer *m_pWebSocketServer;
