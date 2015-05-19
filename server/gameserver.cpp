@@ -151,7 +151,7 @@ void GameServer::game()
                 float angle = atan2(dy,dx);
                 i1.angle = angle;
 
-                float speed = 40.0 * ((800.0-sizetoweight(i1.size))/800.0) * (exec_time/20.0);
+                float speed = 10.0 * ((500.0-sizetoweight(i1.size))/500.0) * (exec_time/20.0);
 
                 i1.velocityx = speed * cos(angle)*dirx;
                 i1.velocityy = speed * sin(angle)*diry;
@@ -163,9 +163,9 @@ void GameServer::game()
                 if (i1.y>world_max) i1.y = world_max;
 
                 //If too big make smaller
-                i1.size -= weighttosize(0.00001);
-                if (i1.size > weighttosize(500)) i1.size -= weighttosize(0.0001);
-                if (i1.size > weighttosize(800)) i1.size -= weighttosize(0.01);
+                //i1.size -= weighttosize(0.00001);
+                if (i1.size > weighttosize(200)) i1.size -= weighttosize(0.00001);
+                if (i1.size > weighttosize(600)) i1.size -= weighttosize(0.0001);
                 if (i1.size < 10 ) i1.size = 10;
 
                 items.replace(i, i1);
@@ -260,7 +260,7 @@ void GameServer::game()
                         }
 
 
-                        if(distance<(combinedradius-weighttosize(10))) {
+                        if(distance<(combinedradius-(i1.size/3))) {
                             //qDebug() << "Collision between "<<QString::number(i1.id)<<" and "<<QString::number(i2.id);
                             kill k;
                             k.attacker = 0;
@@ -404,7 +404,10 @@ void GameServer::updateHighscore()
 
     highscore exti;
     exti.size = 99999;
-    exti.name = "exec time: "+QString::number(exec_time)+"ms";
+    exti.name = QString::number(items.count())+" items";
+    highscores.push_front(exti);
+    exti.size = 99999;
+    exti.name = "Tick every "+QString::number(exec_time)+"ms";
     highscores.push_front(exti);
 
     for (int i = 0; i<m_clients.count(); i++) {
@@ -487,7 +490,7 @@ void GameServer::processBinaryMessage(QByteArray message)
             newitem.y = randomByte()*10;
             newitem.velocityx = 0;
             newitem.velocityy = 0;
-            newitem.size = weighttosize(200.0);
+            newitem.size = weighttosize(10.0);
             newitem.isFood = 0;
             newitem.name = nickname;
             if (temp.sentdebugcommand) {
@@ -596,7 +599,7 @@ void GameServer::processBinaryMessage(QByteArray message)
             player.isready = true;
             clients.replace(clientid, player);
             qDebug()<<"Client "<<QString::number(clientid)<<" is now ready to receive.";
-            sendCamera(pClient, world_min,world_min,world_max,world_max);
+            sendCamera(pClient, world_min,world_max,world_min,world_max);
             break;
         }
         default:
@@ -900,7 +903,7 @@ void GameServer::createFood()
     newitem.y = world_max+1;
     while (newitem.x>world_max) newitem.x = randomByte()*world_max/255;
     while (newitem.y>world_max) newitem.y = randomByte()*world_max/255;
-    newitem.size = weighttosize((uint8_t) qrand() % (5));
+    newitem.size = weighttosize((uint8_t) qrand() % (3));
     newitem.velocityx = 0;
     newitem.velocityy = 0;
     newitem.isVirus = 0;
@@ -1026,10 +1029,12 @@ void GameServer::splitCellsForPlayer(int clientid, bool all)
 {
     client player = clients.at(clientid);
     int ic = items.count();
+    int counter = 0;
     for (int i = 0; i<ic; i++) {
         item it = items.at(i);
         if (it.player == clientid) {
-            splitCell(m_clients.at(clientid), i, all);
+            counter++;
+            if (counter < 16) splitCell(m_clients.at(clientid), i, all);
         }
     }
 }
