@@ -3,8 +3,7 @@
  * (c) Renze Nicolai 2015
  * License: GPLv2
  *
- * Note: This program is not in any way
- * related to the developers behind agar.io
+ * Note: This program is not in any way related to agar.io or it's developers
  *
  * In case you encounter problems while using this software
  * please do NOT contact the agar.io developers but instead
